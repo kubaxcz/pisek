@@ -1,0 +1,120 @@
+name: CI / Build & Deploy
+
+"on":
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_DATABASE: piskari_test
+          MARIADB_USER: piskari_test_user
+          MARIADB_PASSWORD: piskari_test_pass
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      # SFTP deployment targets - configure in GitHub repo/environment settings.
+      SFTP_HOST: ${{ vars.SFTP_HOST }}
+      SFTP_PORT: ${{ vars.SFTP_PORT }}
+      SFTP_USERNAME: ${{ vars.SFTP_USERNAME }}
+      SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+      SFTP_REMOTE_FRONTEND: ${{ vars.SFTP_REMOTE_FRONTEND }} # e.g. /var/www/html
+      SFTP_REMOTE_BACKEND: ${{ vars.SFTP_REMOTE_BACKEND }}   # e.g. /var/www/backend
+
+      # Backend runtime config.
+      DB_HOST: ${{ vars.DB_HOST }}
+      DB_PORT: ${{ vars.DB_PORT }}
+      DB_NAME: ${{ vars.DB_NAME }}
+      DB_USER: ${{ vars.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      CORS_ALLOW_ORIGIN: ${{ vars.CORS_ALLOW_ORIGIN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # ---------- Frontend: install, lint, test, build ----------
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # ---------- Backend: Composer + tests ----------
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, dom, mbstring, curl
+          coverage: none
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Backend tests
+        working-directory: backend
+        run: ./run-tests.sh
+
+      # ---------- Deploy via SFTP ----------
+      - name: Install lftp
+        if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != ''
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Create backend .env from CI vars
+        if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != ''
+        working-directory: backend
+        run: |
+          cat > .env <<EOF
+          DB_HOST=${DB_HOST}
+          DB_PORT=${DB_PORT}
+          DB_NAME=${DB_NAME}
+          DB_USER=${DB_USER}
+          DB_PASSWORD=${DB_PASSWORD}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}
+          EOF
+
+      - name: Deploy frontend via SFTP
+        if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != '' && env.SFTP_REMOTE_FRONTEND != ''
+        run: |
+          echo "Deploying frontend/dist to $SFTP_REMOTE_FRONTEND";
+          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "set net:timeout 30; set net:max-retries 1; set net:persist-retries 0; set sftp:auto-confirm yes; mirror -R frontend/dist '$SFTP_REMOTE_FRONTEND'; bye"
+
+      - name: Deploy backend via SFTP
+        if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != '' && env.SFTP_REMOTE_BACKEND != ''
+        run: |
+          echo "Deploying backend/ to $SFTP_REMOTE_BACKEND";
+          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "set net:timeout 30; set net:max-retries 1; set net:persist-retries 0; set sftp:auto-confirm yes; mirror -R --exclude vendor/bin/ backend '$SFTP_REMOTE_BACKEND'; bye"

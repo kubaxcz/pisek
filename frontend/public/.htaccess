@@ -1,0 +1,8 @@
+# SPA fallback: serve index.html for client-side routes, but never for /api.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^api/ - [L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [QSA,L]
+</IfModule>

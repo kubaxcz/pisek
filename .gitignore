@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Backend
+/backend/vendor/
+/backend/.env
+/backend/.phpunit.result.cache
+/backend/.php-cs-fixer.cache
+
+# Frontend
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+
+# DB (local docker volume)
+/db/db-data/
+
+# Logs
+*.log
