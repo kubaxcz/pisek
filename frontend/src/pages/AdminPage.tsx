@@ -1,48 +1,39 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { adminApi, getAdminPassword, setAdminPassword } from '../api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { adminApi } from '../api';
+import { useAuth } from '../auth/AuthContext';
+import { GoogleLoginButton } from '../auth/GoogleLoginButton';
 import type { ScrapeJob, ScrapeRun, ScrapeState } from '../types';
 
 export function AdminPage() {
-  const [authed, setAuthed] = useState(getAdminPassword().length > 0);
+  const { user, ready } = useAuth();
 
-  if (!authed) {
-    return <PasswordGate onAuthed={() => setAuthed(true)} />;
+  if (!ready) {
+    return <p className="muted">Načítám…</p>;
   }
-  return <ScrapeDashboard onLogout={() => setAuthed(false)} />;
-}
-
-function PasswordGate({ onAuthed }: { onAuthed: () => void }) {
-  const [value, setValue] = useState('');
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    setAdminPassword(value.trim());
-    onAuthed();
+  if (!user) {
+    return (
+      <>
+        <h1>Admin</h1>
+        <p className="muted">Pro přístup do administrace se přihlas.</p>
+        <GoogleLoginButton />
+      </>
+    );
   }
-
-  return (
-    <>
-      <h1>Admin</h1>
-      <form onSubmit={submit}>
-        <div className="field">
-          <label htmlFor="pwd">Heslo administrátora</label>
-          <input
-            id="pwd"
-            type="password"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            autoComplete="current-password"
-          />
+  if (!user.is_admin) {
+    return (
+      <>
+        <h1>Admin</h1>
+        <div className="error">
+          Účet {user.email} nemá oprávnění administrátora. (Přidej e-mail do whitelistu
+          <code> ADMIN_EMAILS</code>.)
         </div>
-        <button className="primary" type="submit">
-          Přihlásit
-        </button>
-      </form>
-    </>
-  );
+      </>
+    );
+  }
+  return <ScrapeDashboard />;
 }
 
-function ScrapeDashboard({ onLogout }: { onLogout: () => void }) {
+function ScrapeDashboard() {
   const [state, setState] = useState<ScrapeState>({ run: null, jobs: [] });
   const [runs, setRuns] = useState<ScrapeRun[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -101,11 +92,6 @@ function ScrapeDashboard({ onLogout }: { onLogout: () => void }) {
     }
   }
 
-  function logout() {
-    setAdminPassword('');
-    onLogout();
-  }
-
   const run = state.run;
   const isActive = run && (run.status === 'planned' || run.status === 'running');
   const pending = state.jobs.filter((j) => j.status === 'pending').length;
@@ -113,11 +99,7 @@ function ScrapeDashboard({ onLogout }: { onLogout: () => void }) {
 
   return (
     <>
-      <div className="app-header__bar" style={{ padding: 0, marginBottom: '0.5rem' }}>
-        <h1 style={{ margin: 0 }}>Scraping</h1>
-        <span className="app-header__spacer" />
-        <button onClick={logout}>Odhlásit</button>
-      </div>
+      <h1>Scraping</h1>
 
       {error ? <div className="error">{error}</div> : null}
 

@@ -13,8 +13,13 @@ describe('Stars', () => {
     expect(container.textContent).toBe('★');
   });
 
-  it('caps at two stars', () => {
+  it('renders five stars', () => {
     const { container } = render(<Stars value={5} />);
+    expect(container.textContent).toBe('★★★★★');
+  });
+
+  it('respects an explicit max', () => {
+    const { container } = render(<Stars value={5} max={2} />);
     expect(container.textContent).toBe('★★');
   });
 });

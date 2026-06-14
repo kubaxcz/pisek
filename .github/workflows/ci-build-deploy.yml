@@ -41,7 +41,9 @@ jobs:
       DB_NAME: ${{ vars.DB_NAME }}
       DB_USER: ${{ vars.DB_USER }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      # Google sign-in client id (public) and the admin e-mail whitelist.
+      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS }}
       CORS_ALLOW_ORIGIN: ${{ vars.CORS_ALLOW_ORIGIN }}
 
     steps:
@@ -97,14 +99,17 @@ jobs:
         if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != ''
         working-directory: backend
         run: |
+          # Frontend and backend are served from the same origin (the SPA
+          # forwards /api to ./backend via .htaccess), so CORS defaults to *.
           cat > .env <<EOF
           DB_HOST=${DB_HOST}
           DB_PORT=${DB_PORT}
           DB_NAME=${DB_NAME}
           DB_USER=${DB_USER}
           DB_PASSWORD=${DB_PASSWORD}
-          ADMIN_PASSWORD=${ADMIN_PASSWORD}
-          CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}
+          GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+          ADMIN_EMAILS=${ADMIN_EMAILS}
+          CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-*}
           EOF
 
       - name: Deploy frontend via SFTP
@@ -117,4 +122,4 @@ jobs:
         if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != '' && env.SFTP_REMOTE_BACKEND != ''
         run: |
           echo "Deploying backend/ to $SFTP_REMOTE_BACKEND";
-          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "set net:timeout 30; set net:max-retries 1; set net:persist-retries 0; set sftp:auto-confirm yes; mirror -R --exclude vendor/bin/ backend '$SFTP_REMOTE_BACKEND'; bye"
+          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "set net:timeout 30; set net:max-retries 1; set net:persist-retries 0; set sftp:auto-confirm yes; mirror -R --exclude vendor/ --exclude tests/ backend '$SFTP_REMOTE_BACKEND'; bye"

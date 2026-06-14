@@ -1,5 +1,10 @@
 import type {
+  AppConfig,
   Area,
+  AscentDetail,
+  AuthUser,
+  OwnAscent,
+  ProtectionType,
   Rock,
   ScrapeRun,
   ScrapeState,
@@ -8,62 +13,109 @@ import type {
   StepResponse,
 } from './types';
 
-const ADMIN_PASSWORD_KEY = 'piskari.adminPassword';
+const TOKEN_KEY = 'piskari.sessionToken';
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+export function getSessionToken(): string {
+  return localStorage.getItem(TOKEN_KEY) ?? '';
+}
+
+export function setSessionToken(token: string): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+function authHeaders(json = false): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = getSessionToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (json) headers['Content-Type'] = 'application/json';
+  return headers;
+}
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('Server neodpovídá (timeout). Běží backend a databáze?');
+    }
+    throw new Error('Backend není dostupný. Běží PHP server?');
+  } finally {
+    clearTimeout(timer);
+  }
+
   if (!res.ok) {
-    throw new Error(`Požadavek selhal (${res.status})`);
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Požadavek selhal (${res.status})`);
   }
   return (await res.json()) as T;
 }
+
+const get = <T>(url: string) => request<T>(url, { headers: authHeaders() });
 
 export const api = {
-  areas: () => getJson<{ areas: Area[] }>('/api/areas').then((r) => r.areas),
+  config: () => get<AppConfig>('/api/config'),
 
-  sectorRoutes: (sectorId: number) =>
-    getJson<SectorRoutesResponse>(`/api/sectors/${sectorId}/routes`),
+  areas: () => get<{ areas: Area[] }>('/api/areas').then((r) => r.areas),
 
-  rock: (rockId: number) => getJson<{ rock: Rock }>(`/api/rocks/${rockId}`).then((r) => r.rock),
+  sectorRoutes: (sectorId: number) => get<SectorRoutesResponse>(`/api/sectors/${sectorId}/routes`),
 
-  search: (query: string) =>
-    getJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`),
+  rock: (rockId: number) => get<{ rock: Rock }>(`/api/rocks/${rockId}`).then((r) => r.rock),
+
+  search: (query: string) => get<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`),
+
+  routeAscents: (routeId: number) => get<AscentDetail>(`/api/routes/${routeId}/ascents`),
+
+  saveAscent: (
+    routeId: number,
+    payload: { route_stars: number | null; belay_stars: number | null; protection: ProtectionType[]; note: string },
+  ) =>
+    request<{ own: OwnAscent }>(`/api/routes/${routeId}/ascent`, {
+      method: 'PUT',
+      headers: authHeaders(true),
+      body: JSON.stringify(payload),
+    }),
+
+  deleteAscent: (routeId: number) =>
+    request<{ ok: boolean }>(`/api/routes/${routeId}/ascent`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }),
 };
 
-// ----- admin --------------------------------------------------------------
+// ----- auth ---------------------------------------------------------------
 
-export function getAdminPassword(): string {
-  return localStorage.getItem(ADMIN_PASSWORD_KEY) ?? '';
-}
+export const authApi = {
+  loginWithGoogle: (idToken: string) =>
+    request<{ token: string; user: AuthUser }>('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_token: idToken }),
+    }),
 
-export function setAdminPassword(password: string): void {
-  localStorage.setItem(ADMIN_PASSWORD_KEY, password);
-}
+  me: () => get<{ user: AuthUser | null }>('/api/auth/me').then((r) => r.user),
 
-async function adminJson<T>(url: string, method: 'GET' | 'POST'): Promise<T> {
-  const res = await fetch(url, {
-    method,
-    headers: { 'X-Admin-Password': getAdminPassword() },
-  });
-  if (res.status === 401) {
-    throw new Error('Neplatné heslo administrátora.');
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `Požadavek selhal (${res.status})`);
-  }
-  return (await res.json()) as T;
-}
+  logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST', headers: authHeaders() }),
+};
+
+// ----- admin (scraping) — now gated by the logged-in user's is_admin -------
 
 export const adminApi = {
-  listRuns: () => adminJson<{ runs: ScrapeRun[] }>('/api/admin/scrape/runs', 'GET').then((r) => r.runs),
+  listRuns: () => get<{ runs: ScrapeRun[] }>('/api/admin/scrape/runs').then((r) => r.runs),
 
-  current: () => adminJson<ScrapeState>('/api/admin/scrape/current', 'GET'),
+  current: () => get<ScrapeState>('/api/admin/scrape/current'),
 
-  run: (runId: number) => adminJson<ScrapeState>(`/api/admin/scrape/runs/${runId}`, 'GET'),
+  run: (runId: number) => get<ScrapeState>(`/api/admin/scrape/runs/${runId}`),
 
-  start: () => adminJson<ScrapeState>('/api/admin/scrape', 'POST'),
+  start: () =>
+    request<ScrapeState>('/api/admin/scrape', { method: 'POST', headers: authHeaders() }),
 
   step: (runId: number) =>
-    adminJson<StepResponse>(`/api/admin/scrape/runs/${runId}/step`, 'POST'),
+    request<StepResponse>(`/api/admin/scrape/runs/${runId}/step`, {
+      method: 'POST',
+      headers: authHeaders(),
+    }),
 };

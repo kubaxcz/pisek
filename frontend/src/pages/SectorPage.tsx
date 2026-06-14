@@ -5,25 +5,40 @@ import { useAsync } from '../hooks/useAsync';
 import { RouteItem } from '../components/RouteItem';
 import type { Route } from '../types';
 
-type SortKey = 'rock' | 'difficulty' | 'stars';
+interface RockGroup {
+  rockId: number;
+  rockName: string;
+  routes: Route[];
+}
 
 export function SectorPage() {
   const { sectorId } = useParams();
   const id = Number(sectorId);
   const { data, loading, error } = useAsync(() => api.sectorRoutes(id), [id]);
 
-  const [sort, setSort] = useState<SortKey>('rock');
   const [minStars, setMinStars] = useState(0);
 
-  const routes = useMemo(() => {
+  const groups = useMemo<RockGroup[]>(() => {
     if (!data) return [];
-    const filtered = data.routes.filter((r) => r.stars >= minStars);
-    return sortRoutes(filtered, sort);
-  }, [data, sort, minStars]);
+    const byRock = new Map<number, RockGroup>();
+    for (const route of data.routes) {
+      if (route.stars < minStars) continue;
+      const rockId = route.rock_id ?? 0;
+      let group = byRock.get(rockId);
+      if (!group) {
+        group = { rockId, rockName: route.rock_name ?? '—', routes: [] };
+        byRock.set(rockId, group);
+      }
+      group.routes.push(route);
+    }
+    return [...byRock.values()].sort((a, b) => a.rockName.localeCompare(b.rockName, 'cs'));
+  }, [data, minStars]);
 
   if (loading) return <p className="muted">Načítám…</p>;
   if (error) return <div className="error">{error}</div>;
   if (!data) return null;
+
+  const totalRoutes = groups.reduce((n, g) => n + g.routes.length, 0);
 
   return (
     <>
@@ -38,11 +53,6 @@ export function SectorPage() {
       ) : null}
 
       <div className="toolbar">
-        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Řazení">
-          <option value="rock">Řadit dle skály</option>
-          <option value="difficulty">Řadit dle obtížnosti</option>
-          <option value="stars">Řadit dle hvězdiček</option>
-        </select>
         <select
           value={minStars}
           onChange={(e) => setMinStars(Number(e.target.value))}
@@ -53,35 +63,27 @@ export function SectorPage() {
           <option value={2}>★★ jen zlaté</option>
         </select>
         <span className="muted" style={{ alignSelf: 'center' }}>
-          {routes.length} cest
+          {groups.length} skal · {totalRoutes} cest
         </span>
       </div>
 
-      {routes.length === 0 ? (
+      {groups.length === 0 ? (
         <p className="muted">Žádné cesty.</p>
       ) : (
-        <ul className="routes">
-          {routes.map((r) => (
-            <RouteItem key={r.id} route={r} showRock />
-          ))}
-        </ul>
+        groups.map((group) => (
+          <section key={group.rockId} className="rock-group">
+            <h2 className="rock-group__title">
+              <Link to={`/skala/${group.rockId}`}>{group.rockName}</Link>{' '}
+              <span className="muted">({group.routes.length})</span>
+            </h2>
+            <ul className="routes">
+              {group.routes.map((r) => (
+                <RouteItem key={r.id} route={r} />
+              ))}
+            </ul>
+          </section>
+        ))
       )}
     </>
   );
-}
-
-function sortRoutes(routes: Route[], sort: SortKey): Route[] {
-  const copy = [...routes];
-  if (sort === 'stars') {
-    copy.sort((a, b) => b.stars - a.stars || a.name.localeCompare(b.name, 'cs'));
-  } else if (sort === 'difficulty') {
-    copy.sort((a, b) => (a.difficulty ?? '').localeCompare(b.difficulty ?? '', 'cs'));
-  } else {
-    copy.sort(
-      (a, b) =>
-        (a.rock_name ?? '').localeCompare(b.rock_name ?? '', 'cs') ||
-        a.name.localeCompare(b.name, 'cs'),
-    );
-  }
-  return copy;
 }

@@ -27,6 +27,50 @@ export interface Route {
   has_photos: boolean;
   rock_id?: number;
   rock_name?: string;
+  // User-rating aggregates (present on catalogue endpoints).
+  user_rating_count?: number;
+  user_stars_avg?: number | null;
+  belay_stars_avg?: number | null;
+  belay_count?: number;
+  ascent_count?: number;
+}
+
+export type ProtectionType = 'kruh' | 'uzel' | 'hodiny' | 'hrot' | 'strom' | 'jine';
+
+export interface AscentEntry {
+  user_id: number;
+  user_name: string | null;
+  route_stars: number | null;
+  belay_stars: number | null;
+  protection: ProtectionType[];
+  note: string | null;
+  updated_at?: string;
+}
+
+export interface OwnAscent {
+  route_stars: number | null;
+  belay_stars: number | null;
+  protection: ProtectionType[];
+  note: string | null;
+}
+
+export interface AscentDetail {
+  route_id: number;
+  entries: AscentEntry[];
+  own: OwnAscent | null;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string | null;
+  picture: string | null;
+  is_admin: boolean;
+}
+
+export interface AppConfig {
+  googleClientId: string;
+  protectionTypes: ProtectionType[];
 }
 
 export interface Rock {

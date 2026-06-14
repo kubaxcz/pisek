@@ -42,8 +42,30 @@ composer install
 ```
 
 Public API: `/api/areas`, `/api/sectors/{id}/routes`, `/api/rocks/{id}`,
-`/api/search?q=...`. Admin API under `/api/admin/scrape/*` (requires the
-`X-Admin-Password` header).
+`/api/search?q=...`, `/api/config`. Auth: `/api/auth/google`, `/api/auth/me`,
+`/api/auth/logout`. Per-user route entries: `GET /api/routes/{id}/ascents`,
+`PUT|DELETE /api/routes/{id}/ascent`. Admin API under `/api/admin/scrape/*`
+(requires a logged-in user whose e-mail is in `ADMIN_EMAILS`).
+
+### Accounts, ratings & admin
+
+- **Sign-in** uses Google Identity Services. The frontend obtains a Google ID
+  token; the backend verifies it, creates/updates the user, and issues an
+  opaque session token (sent as `Authorization: Bearer …`).
+- A signed-in user can open any route and record: **route stars (1–5)**,
+  **belay stars (1–5)**, the **ordered sequence of protection placed**
+  (kruh, uzel, hodiny, hrot, strom, jiné) and a **note**. One editable entry
+  per user per route. The route overview shows aggregate user-stars and the
+  number of belay records; the route dialog shows everyone's entries.
+- **Admin** (scraping) is granted to signed-in users whose e-mail is listed in
+  the `ADMIN_EMAILS` env whitelist.
+
+### Google Cloud setup
+
+Create an **OAuth 2.0 Client ID** (type *Web application*) and add your site to
+**Authorised JavaScript origins** (e.g. `http://localhost:5173` for dev and
+`https://pisek.hkchocen.cz` for prod). Put the client ID in `GOOGLE_CLIENT_ID`.
+No client secret is needed (the ID-token flow is used).
 
 ### 3. Frontend
 
@@ -86,5 +108,5 @@ environment:
 
 - Variables: `SFTP_HOST`, `SFTP_PORT`, `SFTP_USERNAME`, `SFTP_REMOTE_FRONTEND`,
   `SFTP_REMOTE_BACKEND`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`,
-  `CORS_ALLOW_ORIGIN`.
-- Secrets: `SFTP_PASSWORD`, `DB_PASSWORD`, `ADMIN_PASSWORD`.
+  `GOOGLE_CLIENT_ID`, `ADMIN_EMAILS`, `CORS_ALLOW_ORIGIN`.
+- Secrets: `SFTP_PASSWORD`, `DB_PASSWORD`.

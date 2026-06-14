@@ -365,6 +365,33 @@ deploy.
 
 ---
 
+## 9b. User accounts, ratings & belay logging
+
+- **Sign-in:** Google Identity Services. Frontend gets a Google ID token →
+  `POST /api/auth/google` → backend verifies it (audience = `GOOGLE_CLIENT_ID`,
+  email verified) → upserts the user → issues an opaque **session token**
+  (stored in `user_session`) sent as `Authorization: Bearer …`.
+- **Per-user route entry (ascent):** a signed-in user can open any route and
+  record, in one editable entry per route:
+  - **route stars** 1–5,
+  - **belay stars** (jištění) 1–5,
+  - an **ordered sequence of protection placed** — types `kruh, uzel, hodiny,
+    hrot, strom, jine`, order preserved (stored as a JSON array),
+  - a **note**.
+  Endpoints: `GET /api/routes/{id}/ascents` (all entries + own),
+  `PUT|DELETE /api/routes/{id}/ascent`.
+- **Overview aggregates:** the route list shows average user stars + number of
+  ratings, and the number of belay records. The route dialog shows every
+  user's entry (stars, protection sequence, note) and the original piskari
+  link.
+- **Admin (scraping)** is no longer a shared password: it is granted to a
+  signed-in user whose e-mail is in the `ADMIN_EMAILS` whitelist (env). The
+  admin link and scraping endpoints check `is_admin`.
+- **New tables:** `app_user`, `user_session`, `route_ascent` (see
+  `db/003_users_ascents.sql`).
+- **Config:** `GET /api/config` exposes the public `googleClientId` and the
+  protection-type list so the frontend needs no rebuild to change them.
+
 ## 10. Open Questions
 
 - Exact DOM selectors per page type to be confirmed against live HTML

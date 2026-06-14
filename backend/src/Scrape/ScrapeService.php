@@ -130,8 +130,28 @@ final class ScrapeService
      */
     private function scrapeSector(array $job): array
     {
-        $sectorHtml = $this->http->get($job['sector_url']);
-        $rocks = $this->parser->parseRocks($sectorHtml, $job['sector_url']);
+        // Sector listings paginate at 30 rocks/page; follow "next" until the
+        // last page, collecting distinct rocks (keyed by URL).
+        $rocks = [];
+        $seen = [];
+        $pageUrl = $job['sector_url'];
+        $pages = 0;
+        while ($pageUrl !== null && !isset($seen[$pageUrl]) && $pages < 200) {
+            $seen[$pageUrl] = true;
+            $pages++;
+            $html = $this->http->get($pageUrl);
+            foreach ($this->parser->parseRocks($html, $pageUrl) as $rock) {
+                if (!isset($seen['rock:' . $rock['url']])) {
+                    $seen['rock:' . $rock['url']] = true;
+                    $rocks[] = $rock;
+                }
+            }
+            $next = $this->parser->parseNextPageUrl($html, $pageUrl);
+            $pageUrl = $next;
+            if ($next !== null) {
+                $this->throttle();
+            }
+        }
 
         // The sector was upserted (with its season/restriction) during planning;
         // resolve its id without clobbering that data. Fall back to an upsert if

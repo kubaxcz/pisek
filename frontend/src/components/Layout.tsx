@@ -1,8 +1,11 @@
 import { FormEvent, useState } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+import { GoogleLoginButton } from '../auth/GoogleLoginButton';
 
 export function Layout() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [query, setQuery] = useState('');
 
   function onSearch(e: FormEvent) {
@@ -21,9 +24,21 @@ export function Layout() {
             🧗 Piskari
           </Link>
           <span className="app-header__spacer" />
-          <Link to="/admin" className="nav-link">
-            Admin
-          </Link>
+          {user?.is_admin ? (
+            <Link to="/admin" className="nav-link">
+              Admin
+            </Link>
+          ) : null}
+          {user ? (
+            <div className="user-chip">
+              {user.picture ? <img src={user.picture} alt="" className="user-chip__avatar" /> : null}
+              <button className="user-chip__logout" onClick={logout} title="Odhlásit">
+                Odhlásit
+              </button>
+            </div>
+          ) : (
+            <GoogleLoginButton />
+          )}
         </div>
         <form className="search-box" onSubmit={onSearch} role="search">
           <input

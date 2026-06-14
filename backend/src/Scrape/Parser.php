@@ -102,6 +102,20 @@ final class Parser
     }
 
     /**
+     * The "next page" link of a paginated sector listing, or null on the last
+     * page. piskari paginates rocks at 30 per page via a <a class="a-button next">.
+     */
+    public function parseNextPageUrl(string $html, string $baseUrl): ?string
+    {
+        $xpath = $this->xpath($html);
+        $anchor = $this->firstNode($xpath->query("//a[contains(concat(' ', normalize-space(@class), ' '), ' next ')][@href]"));
+        if (!$anchor instanceof DOMElement) {
+            return null;
+        }
+        return $this->absoluteUrl($anchor->getAttribute('href'), $baseUrl);
+    }
+
+    /**
      * @return array{
      *   gps_raw:?string, gps_lat:?float, gps_lon:?float,
      *   routes: list<array{name:string, url:string, difficulty:?string, first_ascent_date:?string, first_ascent_raw:?string, stars:int, comments_count:int, has_photos:bool}>

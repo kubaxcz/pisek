@@ -57,6 +57,20 @@ final class ParserTest extends TestCase
         $this->assertSame('https://www.piskari.cz/cs/skala/brek-2801/', $rocks[1]['url']);
     }
 
+    public function testParseNextPageUrl(): void
+    {
+        $withNext = '<div class="pager"><a href="/cs/adrspach/himalaj-1/1/" class="a-button next" title="další"></a></div>';
+        $this->assertSame(
+            'https://www.piskari.cz/cs/adrspach/himalaj-1/1/',
+            $this->parser->parseNextPageUrl($withNext, 'https://www.piskari.cz/cs/adrspach/himalaj-1/'),
+        );
+
+        $lastPage = '<div class="pager"><a href="/cs/adrspach/himalaj-1/1/" title="2">2</a></div>';
+        $this->assertNull(
+            $this->parser->parseNextPageUrl($lastPage, 'https://www.piskari.cz/cs/adrspach/himalaj-1/2/'),
+        );
+    }
+
     public function testParseRockExtractsGpsAndRoutes(): void
     {
         $html = <<<'HTML'

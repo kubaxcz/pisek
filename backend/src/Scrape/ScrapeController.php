@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Piskari\Scrape;
 
-use Piskari\Auth\AdminAuth;
+use Piskari\Auth\AuthService;
 use Piskari\Http\Request;
 use Piskari\Http\Response;
 use Throwable;
@@ -13,13 +13,14 @@ final class ScrapeController
 {
     public function __construct(
         private readonly ScrapeService $service = new ScrapeService(),
-        private readonly ScrapeRepository $repo = new ScrapeRepository()
+        private readonly ScrapeRepository $repo = new ScrapeRepository(),
+        private readonly AuthService $auth = new AuthService()
     ) {
     }
 
     public function listRuns(Request $request): Response
     {
-        if (!AdminAuth::check($request)) {
+        if (!$this->isAdmin($request)) {
             return self::unauthorized();
         }
 
@@ -28,7 +29,7 @@ final class ScrapeController
 
     public function getRun(Request $request, int $runId): Response
     {
-        if (!AdminAuth::check($request)) {
+        if (!$this->isAdmin($request)) {
             return self::unauthorized();
         }
 
@@ -45,7 +46,7 @@ final class ScrapeController
 
     public function current(Request $request): Response
     {
-        if (!AdminAuth::check($request)) {
+        if (!$this->isAdmin($request)) {
             return self::unauthorized();
         }
 
@@ -62,7 +63,7 @@ final class ScrapeController
 
     public function start(Request $request): Response
     {
-        if (!AdminAuth::check($request)) {
+        if (!$this->isAdmin($request)) {
             return self::unauthorized();
         }
 
@@ -80,7 +81,7 @@ final class ScrapeController
 
     public function step(Request $request, int $runId): Response
     {
-        if (!AdminAuth::check($request)) {
+        if (!$this->isAdmin($request)) {
             return self::unauthorized();
         }
 
@@ -96,6 +97,12 @@ final class ScrapeController
             'run' => $result['run'],
             'jobs' => $this->repo->listJobs($runId),
         ]);
+    }
+
+    private function isAdmin(Request $request): bool
+    {
+        $user = $this->auth->currentUser($request);
+        return $user !== null && $user->isAdmin;
     }
 
     private static function unauthorized(): Response

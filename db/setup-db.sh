@@ -14,6 +14,7 @@ CREATE_TEST_DB=${CREATE_TEST_DB:-"0"}
 SQL_FILES=(
   "$PROJECT_ROOT/001_catalog.sql"
   "$PROJECT_ROOT/002_scrape.sql"
+  "$PROJECT_ROOT/003_users_ascents.sql"
 )
 
 echo "Using container: $CONTAINER_NAME"
