@@ -112,14 +112,18 @@ jobs:
           CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-*}
           EOF
 
+      # Shared lftp settings: use ssh without host-key prompts (fresh CI runner
+      # has no known_hosts), keep verbose so real errors aren't masked.
       - name: Deploy frontend via SFTP
         if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != '' && env.SFTP_REMOTE_FRONTEND != ''
         run: |
           echo "Deploying frontend/dist to $SFTP_REMOTE_FRONTEND";
-          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "set net:timeout 30; set net:max-retries 1; set net:persist-retries 0; set sftp:auto-confirm yes; mirror -R frontend/dist '$SFTP_REMOTE_FRONTEND'; bye"
+          LFTP_SET="set sftp:connect-program 'ssh -a -x -p ${SFTP_PORT:-22} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'; set net:timeout 30; set net:max-retries 3; set net:reconnect-interval-base 5; set sftp:auto-confirm yes"
+          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "$LFTP_SET; mirror -Rv frontend/dist '$SFTP_REMOTE_FRONTEND'; bye"
 
       - name: Deploy backend via SFTP
         if: env.SFTP_HOST != '' && env.SFTP_USERNAME != '' && env.SFTP_PASSWORD != '' && env.SFTP_REMOTE_BACKEND != ''
         run: |
           echo "Deploying backend/ to $SFTP_REMOTE_BACKEND";
-          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "set net:timeout 30; set net:max-retries 1; set net:persist-retries 0; set sftp:auto-confirm yes; mirror -R --exclude vendor/ --exclude tests/ backend '$SFTP_REMOTE_BACKEND'; bye"
+          LFTP_SET="set sftp:connect-program 'ssh -a -x -p ${SFTP_PORT:-22} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'; set net:timeout 30; set net:max-retries 3; set net:reconnect-interval-base 5; set sftp:auto-confirm yes"
+          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://$SFTP_HOST:${SFTP_PORT:-22}" -e "$LFTP_SET; mirror -Rv --exclude vendor/ --exclude tests/ backend '$SFTP_REMOTE_BACKEND'; bye"
